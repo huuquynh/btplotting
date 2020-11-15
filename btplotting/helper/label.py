@@ -8,17 +8,11 @@ def obj2label(obj, fullid=False):
     if isinstance(obj, bt.Strategy):
         return strategy2label(obj, fullid)
     elif isinstance(obj, bt.IndicatorBase):
-        if not fullid:
-            return indicator2label(obj)
-        else:
-            return f'{indicator2label(obj)}@{indicator2fullid(obj)}'
+        return indicator2label(obj, fullid)
     elif isinstance(obj, bt.AbstractDataBase):
-        if not fullid:
-            return get_dataname(obj)
-        else:
-            return f'{get_dataname(obj)}-{obj.__class__.__name__}'
+        return data2label(obj, fullid)
     elif isinstance(obj, bt.ObserverBase):
-        return observer2label(obj)
+        return observer2label(obj, fullid)
     elif isinstance(obj, bt.Analyzer):
         return obj.__class__.__name__
     elif isinstance(obj, bt.MultiCoupler):
@@ -40,31 +34,49 @@ def strategy2label(strategy, params=False):
     return label
 
 
-def observer2label(obs):
-    return obs.plotlabel()
+def data2label(data, fullid=False):
+    if fullid:
+        return f'{get_dataname(data)}-{data.__class__.__name__}'
+    else:
+        return get_dataname(data)
 
 
-def indicator2label(ind):
-    return ind.plotlabel()
+def observer2label(obs, fullid=False):
+    if fullid:
+        return obs.plotlabel()
+    else:
+        return obs.plotinfo.plotname or obs.__class__.__name__
 
 
-def indicator2fullid(ind):
+def indicator2label(ind, fullid=False):
+    if fullid:
+        return ind.plotlabel()
+    else:
+        return ind.plotinfo.plotname or ind.__class__.__name__
+
+
+def obj2data(obj):
     '''
     Returns a string listing all involved data feeds. Empty string if
     there is only a single feed in the mix
     '''
-    if isinstance(ind, bt.LineActions):
+    if isinstance(obj, bt.LineActions):
         return 'Line Action'
-    names = []
-    for x in ind.datas:
-        if isinstance(x, bt.AbstractDataBase):
-            return obj2label(x)
-        elif isinstance(x, bt.LineSeriesStub):
-            # indicator target is one specific line of a datafeed
-            # add [L] at the end
-            return obj2label(get_clock_obj(x)) + ' [L]'
-        elif isinstance(x, bt.IndicatorBase):
-            names.append(indicator2label(x))
-    if len(names) > 0:
-        return f'({",".join(names)})'
+    elif isinstance(obj, bt.AbstractDataBase):
+        return obj2label(obj)
+    elif isinstance(obj, bt.IndicatorBase):
+        names = []
+        for x in obj.datas:
+            if isinstance(x, bt.AbstractDataBase):
+                return obj2label(x)
+            elif isinstance(x, bt.IndicatorBase):
+                names.append(indicator2label(x, False))
+            elif isinstance(x, bt.LineSeriesStub):
+                # indicator target is one specific line of a datafeed
+                # add [L] at the end
+                return obj2label(get_clock_obj(x)) + ' [L]'
+        if len(names) > 0:
+            return ",".join(names)
+    else:
+        raise RuntimeError(f'Unsupported type: {obj.__class__}')
     return ''

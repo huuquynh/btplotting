@@ -89,11 +89,10 @@ class BacktraderPlotting(metaclass=bt.MetaParams):
         self._iplot = None
         self._figurepages = {}
         # set tabs
-        self.tabs = []
+        self.tabs = copy(self.p.tabs)
         if self.p.use_default_tabs:
-            self.tabs = ([
+            self.tabs += [
                 AnalyzerTab, MetadataTab, SourceTab, LogTab]
-                + copy(self.tabs))
         if not isinstance(self.tabs, list):
             raise Exception(
                 'Param tabs needs to be a list containing tabs to display')
@@ -114,7 +113,7 @@ class BacktraderPlotting(metaclass=bt.MetaParams):
         Applies config from plotconfig param to objects
         '''
         fp = self.get_figurepage(figid)
-        objs = get_plotobjs(fp.strategy)
+        objs = get_plotobjs(fp.strategy, include_non_plotable=True)
 
         i = 0
         for d in objs:
@@ -272,7 +271,8 @@ class BacktraderPlotting(metaclass=bt.MetaParams):
                          resources=CDN,
                          template_variables=dict(
                              stylesheet=self._output_stylesheet(),
-                             show_headline=self.scheme.show_headline))
+                             show_headline=self.scheme.show_headline),
+                         _always_new=True)
 
         with open(filename, 'w') as f:
             f.write(html)
@@ -371,7 +371,9 @@ class BacktraderPlotting(metaclass=bt.MetaParams):
 
         # sort figures
         data_sort = {False: 0}
-        for i, d in enumerate(get_datanames(fp.strategy), start=1):
+        for i, d in enumerate(
+                get_datanames(fp.strategy, filter=False),
+                start=1):
             data_sort[d] = i
         sorted_figs = list(fp.figures)
         sorted_figs.sort(key=lambda x: (
@@ -485,15 +487,8 @@ class BacktraderPlotting(metaclass=bt.MetaParams):
         # get clock list for index
         clkidx = clock.clk
 
-        # create index
-        if preserveidx:
-            idxstart = clock.start
-            indices = list(range(idxstart, idxstart + len(clkidx)))
-        else:
-            indices = list(range(len(clkidx)))
+        # create DataFrame
         df = pd.DataFrame()
-        df['datetime'] = clkidx
-        df['index'] = indices
 
         # generate data for all figurepage objects
         for d in objs:
@@ -507,7 +502,7 @@ class BacktraderPlotting(metaclass=bt.MetaParams):
                         name_prefix=source_id,
                         skip=['datetime'],
                         fill_gaps=fill_gaps)
-                    df = df.join(df_data)
+                    df = df_data.join(df)
                 else:
                     for lineidx, line in enumerate(obj.lines):
                         source_id = get_source_id(line)
@@ -517,13 +512,21 @@ class BacktraderPlotting(metaclass=bt.MetaParams):
                             fill_gaps=fill_gaps)
                         df[source_id] = new_line
 
-        # apply a proper index (should be identical to 'index' column)
+        # set required values and apply index
         if df.shape[0] > 0:
+            if preserveidx:
+                idxstart = clock.start
+                indices = list(range(idxstart, idxstart + len(clkidx)))
+            else:
+                indices = list(range(len(clkidx)))
             df.index = indices
+            df['index'] = indices
+            df['datetime'] = clkidx
         else:
-            # ensure the dtype is correct on empty df
-            df['index'] = df['index'].astype('int64')
-            df['datetime'] = df['datetime'].astype('datetime64[ns]')
+            # if there is no data ensure the dtype is correct for
+            # required values
+            df['index'] = np.array([], dtype=np.int64)
+            df['datetime'] = np.array([], dtype=np.datetime64)
         return df
 
     def plot_optmodel(self, obj):
